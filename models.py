@@ -12,3 +12,4 @@ class UserLease(BaseTable):
     __tablename__ = "user_lease"
     id = Column(Integer, primary_key=True)
     ip_addr = Column(String(50), nullable=False)
+    mac_address = Column(String(50))

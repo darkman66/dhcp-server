@@ -1,5 +1,7 @@
 import asyncio
+import coloredlogs
 import gc
+import logging
 import socket
 import time
 from models import UserLease
@@ -16,6 +18,7 @@ class CaptiveDhcpServer:
         self.macs = {}
 
     def get_free_ip(self, server_ip: str, mac: str):
+        logging.info(f"Server IP: {server_ip}")
         next_ip = Ip.next_ip(server_ip)
         while next_ip in self.ips:
             next_ip = Ip.next_ip(next_ip)
@@ -35,20 +38,29 @@ class CaptiveDhcpServer:
             # see: https://github.com/micropython/micropython/issues/8729
             # udpb.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             udpb.setsockopt(socket.SOL_SOCKET, 0x20, 1)
-
             udpb.setblocking(False)
             broadcast_addr = socket.getaddrinfo("255.255.255.255", 68, socket.AF_INET, socket.SOCK_DGRAM)[0][4]
-            print(f"Broadcasting Response: {reply}")
+            logging.info(f"Broadcasting Response: {reply}")
             udpb.sendto(reply, broadcast_addr)
         except Exception as e:
-            print(f"Failed to broadcast reply {e}")
+            logging.error(f"Failed to broadcast reply {e}")
         finally:
             udpb.close()
+
+    async def get_or_create_lease(self, server_ip, mac_address):
+        with Session(engine) as session:
+            result = session.query(UserLease).filter(mac_address == mac_address)
+            if result.count() > 0:
+                return result.first().ip_addr
+            ip_addr = self.get_free_ip(server_ip, mac_address)
+            user_lease = UserLease(ip_addr=ip_addr, mac_address=mac_address)
+            session.add(user_lease)
+            session.commit()
 
     async def get_leases(self):
         with Session(engine) as session:
             lease_count = session.query(UserLease).count()
-            print(f"Lease count {lease_count}")
+            logging.info(f"Lease count {lease_count}")
 
     async def run(self, server_ip: str, netmask: str):
         await self.get_leases()
@@ -62,10 +74,10 @@ class CaptiveDhcpServer:
                 gc.collect()
                 addr = socket.getaddrinfo("0.0.0.0", 67, socket.AF_INET, socket.SOCK_DGRAM)[0][-1]
                 udps.bind(addr)
-                print("Starting server on port 67")
+                logging.info("Starting server on port 67")
                 bound = True
             except Exception as e:
-                print(f"Failed to bind to port {e}")
+                logging.error(f"Failed to bind to port {e}")
                 time.sleep(0.5)
 
         while True:
@@ -73,27 +85,27 @@ class CaptiveDhcpServer:
                 gc.collect()
 
                 data, addr = udps.recvfrom(2048)
-                print("Incoming data...")
-                print(data)
+                logging.info("Incoming data...")
+                logging.debug(data)
 
                 request = Header.parse(data)
-                print(request)
+                logging.debug(request)
 
                 if isinstance(request, DhcpDiscover):
-                    print("Creating Offer for Discover")
+                    logging.info("Creating Offer for Discover")
                     response = DhcpOffer()
-                    client_ip = self.get_free_ip(server_ip, request.header.chaddr)
-                    print("Found new ip: " + client_ip)
+                    client_ip = await self.get_or_create_lease(server_ip, request.header.chaddr)
+                    logging.info(f"Found new ip: {client_ip}")
                     reply = response.answer(request, client_ip, server_ip, netmask)
-                    print(response)
+                    logging.debug(response)
 
                     self.send_broadcast_reply(reply)
 
                 elif isinstance(request, DhcpRequest):
-                    print("Creating Ack for Request")
+                    logging.info("Creating Ack for Request")
                     response = DhcpAck()
                     reply = response.answer(request, server_ip, netmask)
-                    print(response)
+                    logging.info(response)
 
                     self.send_broadcast_reply(reply)
 
@@ -103,12 +115,13 @@ class CaptiveDhcpServer:
                 await asyncio.sleep(0.5)
 
             except Exception as e:
-                print(f"Exception {e}")
+                logging.error(f"Exception {e}")
                 await asyncio.sleep(0.5)
 
         udps.close()
 
 
 if __name__ == "__main__":
+    coloredlogs.install(level=logging.DEBUG)
     run_app = CaptiveDhcpServer()
     asyncio.run(run_app.run("10.65.4.1", "255.255.0.0"))
