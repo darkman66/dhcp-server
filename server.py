@@ -6,27 +6,20 @@ import socket
 import time
 from models import UserLease
 from packet import Header, DhcpDiscover, DhcpRequest, DhcpOffer, DhcpAck, Ip
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, desc
 from sqlalchemy.orm import Session
 
 engine = create_engine("mysql+pymysql://root@localhost/dhcp_service")
 
 
 class CaptiveDhcpServer:
-    def __init__(self):
-        self.ips = {}
-        self.macs = {}
-
-    def get_free_ip(self, server_ip: str, mac: str):
+    async def get_free_ip(self, server_ip: str, mac: str) -> str:
         logging.info(f"Server IP: {server_ip}")
-        next_ip = Ip.next_ip(server_ip)
-        while next_ip in self.ips:
-            next_ip = Ip.next_ip(next_ip)
-
-        self.ips[next_ip] = int(time.time())
-        self.macs[mac] = next_ip
-
-        return next_ip
+        with Session(engine) as session:
+            result = session.query(UserLease).order_by(desc(func.INET_ATON(UserLease.ip_addr))).limit(1).first()
+            if result:
+                return Ip.next_ip(result.ip_addr)
+        return Ip.next_ip(server_ip)
 
     def send_broadcast_reply(self, reply):
         udpb = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -52,7 +45,7 @@ class CaptiveDhcpServer:
             result = session.query(UserLease).filter(mac_address == mac_address)
             if result.count() > 0:
                 return result.first().ip_addr
-            ip_addr = self.get_free_ip(server_ip, mac_address)
+            ip_addr = await self.get_free_ip(server_ip, mac_address)
             user_lease = UserLease(ip_addr=ip_addr, mac_address=mac_address)
             session.add(user_lease)
             session.commit()
