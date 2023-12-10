@@ -108,9 +108,7 @@ class CaptiveDhcpServer:
                     logging.info(response)
 
                     self.send_broadcast_reply(reply)
-
                 await asyncio.sleep(0.1)
-
             except OSError:
                 await asyncio.sleep(0.5)
 
