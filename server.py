@@ -59,7 +59,6 @@ class CaptiveDhcpServer:
         bound = False
         while not bound:
             try:
-                gc.collect()
                 addr = socket.getaddrinfo("0.0.0.0", 67, socket.AF_INET, socket.SOCK_DGRAM)[0][-1]
                 udps.bind(addr)
                 logging.info("Starting server on port 67")
@@ -70,8 +69,6 @@ class CaptiveDhcpServer:
 
         while True:
             try:
-                gc.collect()
-
                 data, addr = udps.recvfrom(2048)
                 logging.info("Incoming data...")
                 logging.debug(data)
