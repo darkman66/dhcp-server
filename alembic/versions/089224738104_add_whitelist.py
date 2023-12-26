@@ -5,6 +5,7 @@ Revises: 83982abde4ad
 Create Date: 2023-12-20 20:07:25.260347
 
 """
+from datetime import datetime
 from typing import Sequence, Union
 
 from alembic import op
@@ -22,7 +23,9 @@ def upgrade() -> None:
     op.create_table(
         "white_list_lease",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("mac_address", sa.String(50)),
+        sa.Column("mac_address", sa.String(50), unique=True),
+        sa.Column("created_at", sa.DateTime, default=datetime.now),
+        sa.Column("updated_at", sa.DateTime, default=datetime.now),
     )
 
 

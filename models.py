@@ -18,4 +18,4 @@ class UserLease(BaseTable):
 class WhiteListLease(BaseTable):
     __tablename__ = "white_list_lease"
     id = Column(Integer, primary_key=True)
-    mac_address = Column(String(50))
+    mac_address = Column(String(50), unique=True)
