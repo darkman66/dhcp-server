@@ -19,3 +19,10 @@ class WhiteListLease(BaseTable):
     __tablename__ = "white_list_lease"
     id = Column(Integer, primary_key=True)
     mac_address = Column(String(50), unique=True)
+
+
+class ArpRecord(BaseTable):
+    __tablename__ = "arp_record"
+    id = Column(Integer, primary_key=True)
+    ip_addr = Column(String(50), nullable=False)
+    mac_address = Column(String(50), unique=True)
