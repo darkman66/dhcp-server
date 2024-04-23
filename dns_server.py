@@ -1,9 +1,33 @@
 import coloredlogs
+import os
 import logging
 import time
+import requests
 from dnslib import QTYPE
 from dnslib.proxy import ProxyResolver as BaseProxyResolver
 from dnslib.server import DNSServer
+
+
+def fetch_dns_blacklist():
+    url = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/domains/light.txt"
+    response = requests.get(url)
+    return response.text.split("\n")
+
+
+def load_local():
+    local_file = "blacklist.txt"
+    if os.path.exists(local_file):
+        with open(local_file, "r") as f:
+            return f.read().split("\n")
+    return []
+
+
+GLOBAL_BLACKLIST = fetch_dns_blacklist()
+LOCAL_BLACKLIST = load_local()
+
+
+def is_name_valid(site_name):
+    return site_name not in GLOBAL_BLACKLIST and site_name not in LOCAL_BLACKLIST
 
 
 class ProxyResolver(BaseProxyResolver):
@@ -12,8 +36,11 @@ class ProxyResolver(BaseProxyResolver):
 
     def resolve(self, request, handler):
         type_name = QTYPE[request.q.qtype]
-        logging.info(f"Query type: {type_name}")
-        return super().resolve(request, handler)
+        q_name = str(request.q.get_qname()).strip(".")
+        logging.info(f"Query type: {type_name}, name: {q_name}")
+        if is_name_valid(q_name):
+            logging.info("Query not on the blacklist")
+            return super().resolve(request, handler)
 
 
 class DNSService:
@@ -56,3 +83,4 @@ if __name__ == "__main__":
     s.start()
     while s.is_running:
         time.sleep(0.1)
+    # print(fetch_dns_blacklist())
